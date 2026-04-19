@@ -1,0 +1,5 @@
+telethon==1.36.0
+python-telegram-bot==13.15
+pytz
+requests
+emoji

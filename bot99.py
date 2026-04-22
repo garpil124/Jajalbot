@@ -1,249 +1,146 @@
 import pytz
 import os
 import requests
-import time 
+import time
 import threading
 import asyncio
 import json
-import shutil
-import traceback
 import re
-import json
+import pesan
 import random   # 🔥 WAJIB
 import html     # 🔥 biar ga error escape
-from datetime import datetime
+import subprocess
+import zipfile
 from queue import Queue
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext, CommandHandler, CallbackQueryHandler
 from telethon import TelegramClient
+import database99
+from font import register_font
 from absen import register_absen
 from jobdast import register_jobdast
-import database99
+from fitur import register_fitur
+from user import register_menu
 
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
-
 
 TOKEN = "8281626455:AAGhZGYsgEyV-VFY4qp3_kkU57RaBVX2ZD4"
 API_URL = "http://127.0.0.1:5000/get"
 TARGET_CHATS = [-1002101188966]
 FORCE_GROUP =-1002101188966   # 🔥 WAJIB (buat cek join)
 FORCE_LINK = "https://t.me/tongkrongan_gaje"
-OWNER_IDS = [8209644174, 6479082885, 6220828950]
+OWNER_IDS = [8209644174, 6479082885, 6220828950, 392125204]
 PARTNER_FILE = "partner.json99"
+SETTING_FILE = "setting.json99"
 SETTING_FILE = "setting.json99"
 QUEUE_FILE = "queue.json99"
 AUTO_TAG_FILE = "autotag.json99"
 BUTTON_FILE = "buttons.json99"
-api_id = 33370509
-api_hash = "669af6caebf2aca264b16cf8b40d37b2"
-client = TelegramClient("session_new99", api_id, api_hash)
-client.start()  # 🔥 WAJIB di sini
-# ================= SETTING ============
+BACKUP_DIR = "backups99"
+SERVICE_NAME = "jajalbot"
+api_id = 35873646
+api_hash = "3eaf9faf00e794125b7330d4978ffdce"
+client = TelegramClient("session9", api_id, api_hash)
+client.start()
+task_queue = Queue()
+running_task = False  # 🔥 ANTI DOUBLE TASK
+# ================= SETTING =================
 def load_setting():
-    if not os.path.exists(SETTING_FILE):
-        return {}
-
     try:
         with open(SETTING_FILE, "r") as f:
-            data = json.load(f)
-
-            if not isinstance(data, dict):
-                return {}
-
-            return data
-
-    except Exception as e:
-        print("❌ LOAD SETTING ERROR:", e)
+            return json.load(f)
+    except:
         return {}
 
-
 def save_setting(data):
-    try:
-        # pastikan folder ada (kalau nanti path dipindah)
-        folder = os.path.dirname(SETTING_FILE)
-        if folder and not os.path.exists(folder):
-            os.makedirs(folder)
+    with open(SETTING_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
-        with open(SETTING_FILE, "w") as f:
-            json.dump(data, f, indent=4)
 
-    except Exception as e:
-        print("❌ SAVE SETTING ERROR:", e)
-
-# ================= FILE (FIXED & SUPER STABLE) =================
-# ================= FILE (FIXED SUPER STABLE + DEBUG) =================
-
+# ================= FILE (JANGAN DIUBAH) =================
 def load_partner():
-    import os
-    import json
-
     if not os.path.exists(PARTNER_FILE):
-        print("⚠️ partner file ga ada, return kosong")
         return []
 
     try:
         with open(PARTNER_FILE, "r") as f:
             data = json.load(f)
 
+        # 🔥 pastikan list
         if not isinstance(data, list):
-            print("⚠️ format bukan list, return kosong")
             return []
 
-        print(f"✅ LOAD PARTNER ({len(data)} data)")
-        return data
+        # 🔥 filter hanya data valid (dict)
+        clean_data = []
+        for p in data:
+            if isinstance(p, dict):
+                clean_data.append(p)
+
+        return clean_data
 
     except Exception as e:
-        print("❌ LOAD PARTNER ERROR:", e)
+        print("❌ load error:", e)
         return []
 
 
 def save_partner(data):
     try:
-        print("\n🔥 SAVE PARTNER DIPANGGIL")
-        print("📊 TOTAL DATA MASUK:", len(data))
+        # 🔥 hanya simpan yang valid
+        clean_data = [p for p in data if isinstance(p, dict)]
 
-        print("📍 CALL TRACE (SAFE MODE)")
-
-        # ================= VALIDASI =================
-        if not isinstance(data, list):
-            print("❌  DATA BUKAN LIST, CANCEL")
-            return
-
-        clean_data = []
-        seen = set()
-
-        for p in data:
-            if isinstance(p, dict) and "link" in p:
-                link = p.get("link")
-
-                if not link or not isinstance(link, str):
-                    continue
-
-                if link in seen:
-                    continue
-
-                seen.add(link)
-                clean_data.append(p)
-
-        # ================= 🔒 ANTI WIPE =================
-        if len(clean_data) == 0 and os.path.exists(PARTNER_FILE):
-            print("🚨 DETECT DATA JADI 0 → SAVE DIBATALKAN (ANTI HILANG)")
-            return
-
-        # ================= BACKUP =================
-        if os.path.exists(PARTNER_FILE):
-            backup_dir = "backup_partner"
-
-            if not os.path.exists(backup_dir):
-                os.makedirs(backup_dir)
-
-            timestamp = int(time.time())
-            backup_file = f"{backup_dir}/partner_{timestamp}.json"
-
-            try:
-                shutil.copy(PARTNER_FILE, backup_file)
-                print(f"📦 Backup dibuat: {backup_file}")
-            except Exception as e:
-                print("❌  Backup error:", e)
-
-        # ================= SAFE WRITE =================
-        temp_file = PARTNER_FILE + ".tmp"
-
-        with open(temp_file, "w") as f:
+        with open(PARTNER_FILE, "w") as f:
             json.dump(clean_data, f, indent=2)
 
-        os.replace(temp_file, PARTNER_FILE)
-
-        print(f"✅  BERHASIL SAVE ({len(clean_data)} data)")
-
-        # ================= AUTO CLEAN BACKUP =================
-        try:
-            if os.path.exists("backup_partner"):
-                backups = sorted(os.listdir("backup_partner"))
-
-                if len(backups) > 20:
-                    for old in backups[:-20]:
-                        os.remove(f"backup_partner/{old}")
-                        print(f"🗑️ Backup lama dihapus: {old}")
-
-        except Exception:
-            pass
+        print("✅ KE SAVE:", clean_data)
 
     except Exception as e:
-        print("❌  SAVE PARTNER ERROR:", e)
-        traceback.print_exc()
+        print("❌ save error:", e)
 
-# ================= BUTTON =================
-
+# ================= BUTTON FILE (BARU) =================
 def load_buttons():
     if not os.path.exists(BUTTON_FILE):
-        print("⚠️ BUTTON FILE GA ADA")
         return {}
-
     try:
         with open(BUTTON_FILE, "r") as f:
-            data = json.load(f)
-            print("✅ BUTTON LOADED:", data)
-            return data
+            return json.load(f)
     except Exception as e:
-        print("❌ LOAD BUTTON ERROR:", e)
+        print("❌ load button error:", e)
         return {}
-
 
 def save_buttons(data):
     try:
-        temp_file = BUTTON_FILE + ".tmp"
-
-        with open(temp_file, "w") as f:
+        with open(BUTTON_FILE, "w") as f:
             json.dump(data, f, indent=2)
-
-        os.replace(temp_file, BUTTON_FILE)
-
         print("✅ BUTTON KE SAVE:", data)
-
     except Exception as e:
-        print("❌ SAVE BUTTON ERROR:", e)
+        print("❌ save button error:", e)
 
+def load_autotag():
+    global auto_data
+    if not os.path.exists(AUTO_TAG_FILE):
+        auto_data = {}
+        return
+    try:
+        with open(AUTO_TAG_FILE, "r") as f:
+            auto_data = json.load(f)
+    except:
+        auto_data = {}
 
-# ================= SAVE GROUP =================
+def save_autotag():
+    with open(AUTO_TAG_FILE, "w") as f:
+        json.dump(auto_data, f, indent=2)
 
 def save_last_group(update, context):
     user_id = str(update.effective_user.id)
     chat_id = update.effective_chat.id
 
-    try:
-        # 🔥 HANYA GROUP
-        if chat_id < 0:
+    if chat_id < 0:
+        if user_id not in auto_data:
+            auto_data[user_id] = {}
 
-            # 🔥 JANGAN OVERWRITE DATA
-            if user_id not in auto_data:
-                auto_data[user_id] = {}
-
-            auto_data[user_id]["chat_id"] = chat_id
-
-            print(f"📌 GROUP KE SAVE: {user_id} -> {chat_id}")
-
-            # 🔥 LOG KE TELEGRAM
-            try:
-                context.bot.send_message(
-                    LOG_CHAT_ID,
-                    f"📌 SET TARGET GROUP\n"
-                    f"👤 {user_id}\n"
-                    f"🎯 {chat_id}"
-                )
-            except Exception as log_err:
-                print("LOG ERROR:", log_err)
-
-    except Exception as e:
-        print("❌ SAVE GROUP ERROR:", e)
-        try:
-            context.bot.send_message(
-                LOG_CHAT_ID,
-                f"❌ ERROR SAVE GROUP\n👤 {user_id}\n{e}"
-            )
-        except Exception as log_err:
-            print("LOG ERROR:", log_err)
+        auto_data[user_id]["chat_id"] = chat_id
+        save_autotag()
 
 # ================= PERSISTENT QUEUE =================
 def save_queue():
@@ -315,36 +212,6 @@ def get_group_name(link):
 
 
 # ================= COMMAND =================
-def add_livechat(update, context):
-    if update.effective_user.id not in OWNER_IDS:
-        return
-
-    if not context.args:
-        return update.message.reply_text(
-            "❌ kirim link\nContoh: /addlivechat https://t.me/xxxx"
-        )
-
-    link = context.args[0]
-
-    if not link.startswith("https://t.me/"):
-        return update.message.reply_text("❌ link harus https://t.me/")
-
-    data = load_setting()
-    data["livechat"] = link
-    save_setting(data)
-
-    update.message.reply_text("✅ Live chat disimpan")
-
-def del_livechat(update, context):
-    if update.effective_user.id not in OWNER_IDS:
-        return
-
-    data = load_setting()
-    data.pop("livechat", None)
-    save_setting(data)
-
-    update.message.reply_text("✅ Live chat dihapus")
-
 def add_partner(update, context):
     if update.effective_user.id not in OWNER_IDS:
         return
@@ -415,11 +282,40 @@ def del_partner(update, context):
     save_partner(new_data)
     update.message.reply_text("✅ Partner dihapus")
 
+# ================= COMMAND =================
+def add_livechat(update, context):
+    if update.effective_user.id not in OWNER_IDS:
+        return
+
+    if not context.args:
+        return update.message.reply_text(
+            "❌ kirim link\nContoh: /addlivechat https://t.me/xxxx"
+        )
+
+    link = context.args[0]
+
+    if not link.startswith("https://t.me/"):
+        return update.message.reply_text("❌ link harus https://t.me/")
+
+    data = load_setting()
+    data["livechat"] = link
+    save_setting(data)
+
+    update.message.reply_text("✅ Live chat disimpan")
+
+def del_livechat(update, context):
+    if update.effective_user.id not in OWNER_IDS:
+        return
+
+    data = load_setting()
+    data.pop("livechat", None)
+    save_setting(data)
+
+    update.message.reply_text("✅ Live chat dihapus")
+
 def tagall_cmd(update, context):
-    print("MASUK TAGALL")
     chat = update.effective_chat
     user = update.effective_user
-    context.bot.send_message(chat.id, "MASUK TAGALL")
 
     # ❌ Jangan di private
     if chat.type == "private":
@@ -429,39 +325,34 @@ def tagall_cmd(update, context):
     try:
         member = context.bot.get_chat_member(chat.id, user.id)
         if member.status not in ["administrator", "creator"]:
-            context.bot.send_message(chat.id, "❌ Khusus admin")
+            update.message.reply_text("❌ Khusus admin")
             return
-    except Exception as e:
-        print("ERROR ADMIN:", e)
+    except:
         return
 
-    # 🔥 AUTO DATA (optional)
-    user_id = str(user.id)
+    # 🔥 TAMBAHAN INI (WAJIB)
+    user_id = str(update.effective_user.id)
+
     if user_id not in auto_data:
         auto_data[user_id] = {}
 
     auto_data[user_id]["chat_id"] = chat.id
+    save_autotag()
 
-    # 🔥 INPUT TEXT / REPLY
+    # ================= LANJUT KODE LU =================
     text = " ".join(context.args)
 
     if text:
+        manual_setup[chat.id] = {"msg": text, "mode": "text"}
+    elif update.message.reply_to_message:
         manual_setup[chat.id] = {
-            "msg": text,
-            "mode": "text"
-        }
-
-    elif update.effective_message and update.effective_message.reply_to_message:
-        manual_setup[chat.id] = {
-            "msg": update.effective_message.reply_to_message,
+            "msg": update.message.reply_to_message,
             "mode": "reply"
         }
-
     else:
-        context.bot.send_message(chat.id, "❌ Isi teks atau reply pesan")
+        update.message.reply_text("❌ Isi teks atau reply pesan")
         return
 
-    # 🔥 BUTTON
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("2 menit", callback_data="dur_2"),
          InlineKeyboardButton("5 menit", callback_data="dur_5")],
@@ -471,9 +362,8 @@ def tagall_cmd(update, context):
          InlineKeyboardButton("Unlimited", callback_data="dur_unli")]
     ])
 
-    context.bot.send_message(
-        chat_id=chat.id,
-        text="⏱ Pilih durasi:",
+    update.message.reply_text(
+        "⏱ Pilih durasi:",
         reply_markup=keyboard
     )
 
@@ -517,11 +407,24 @@ def list_partner(update, context):
 
     text = "📋 𝐋𝐈𝐒𝐓 𝐏𝐀𝐑𝐓𝐍𝐄𝐑\n\n"
 
-    for i, p in enumerate(data, 1):
-        text += f"〔{i}〕 {p.get('name','-')}\n"
-        text += f"🔗 {p.get('link','-')}\n\n"
+    def send_chunk(msg):
+        update.message.reply_text(msg)
 
-    update.message.reply_text(text)
+    chunk = ""
+
+    for i, p in enumerate(data, 1):
+        item = f"〔{i}〕 {p.get('name','-')}\n🔗 {p.get('link','-')}\n\n"
+
+        # kalau udah hampir limit, kirim dulu
+        if len(chunk) + len(item) > 3500:
+            send_chunk(chunk)
+            chunk = item
+        else:
+            chunk += item
+
+    # kirim sisa
+    if chunk:
+        send_chunk(chunk)
 
 def addbuttontag_cmd(update, context):
     print("🔥 addbuttontag kepanggil")
@@ -579,6 +482,257 @@ def fancy_name(text):
 
     normal, fancy = random.choice(fonts)
     return text.translate(str.maketrans(normal, fancy))
+
+def autotag_menu(update: Update, context: CallbackContext):
+    user_id = str(update.effective_user.id)
+
+    if update.effective_user.id not in OWNER_IDS:
+        return
+
+    if update.effective_chat.type != "private":
+        update.message.reply_text("❌ Gunakan di private")
+        return
+
+    if not context.args:
+        update.message.reply_text("❌ Contoh:\n/autotag pesan")
+        return
+
+    msg = " ".join(context.args)
+
+    if user_id not in auto_data:
+        auto_data[user_id] = {}
+
+    auto_data[user_id].update({
+        "text": msg,
+        "hour": None,
+        "minute": 0,
+        "duration": 60,
+        "active": False,
+        "last_run": None,
+        "chat_id": update.effective_chat.id
+    })
+
+    save_autotag()
+
+    buttons, row = [], []
+    for i in range(24):
+        row.append(InlineKeyboardButton(f"{i:02d}:00", callback_data=f"setjam_{i}"))
+        if len(row) == 4:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    update.message.reply_text(
+        "🕒 PILIH JAM AUTO TAGALL",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+def pilih_jam(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    if query.from_user.id not in OWNER_IDS:
+        return
+
+    user_id = str(query.from_user.id)
+
+    if user_id not in auto_data:
+        query.edit_message_text("❌ Session hilang")
+        return
+
+    jam = int(query.data.split("_")[1])
+
+    auto_data[user_id]["hour"] = jam
+    save_autotag()
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⏱ 10 MENIT", callback_data="autodur_10"),
+            InlineKeyboardButton("⏱ 15 MENIT", callback_data="autodur_15")
+        ],
+        [
+            InlineKeyboardButton("⏱ 30 MENIT", callback_data="autodur_30"),
+            InlineKeyboardButton("⏱ 60 MENIT", callback_data="autodur_60")
+        ],
+        [
+            InlineKeyboardButton("⏱ 120 MENIT", callback_data="autodur_120")
+        ]
+    ])
+
+    query.edit_message_text(
+        f"✅ JAM: {jam:02d}:00\n\nPilih durasi:",
+        reply_markup=keyboard
+    )
+
+def pilih_durasi(update: Update, context: CallbackContext):
+    query = update.callback_query
+
+    try:
+        query.answer()
+    except:
+        pass
+
+    if query.from_user.id not in OWNER_IDS:
+        return
+
+    user_id = str(query.from_user.id)
+
+    if user_id not in auto_data:
+        query.edit_message_text("❌ Session hilang")
+        return
+
+    dur = int(query.data.split("_")[1])
+
+    auto_data[user_id]["duration"] = dur
+    auto_data[user_id]["active"] = True
+
+    save_autotag()
+
+    query.edit_message_text(
+        f"🚀 AUTO TAG AKTIF\n\n"
+        f"🕒 Jam: {auto_data[user_id]['hour']:02d}:00\n"
+        f"⏱ Durasi: {dur} menit\n\n"
+        f"Bot jalan tiap hari otomatis."
+    )
+
+def onauto(update, context):
+    user_id = str(update.effective_user.id)
+
+    if user_id not in auto_data:
+        update.message.reply_text("❌ Belum ada setting auto tag")
+        return
+
+    auto_data[user_id]["active"] = True
+    save_autotag()
+    update.message.reply_text("🟢 AUTO TAG AKTIF")
+
+
+def offauto(update, context):
+    user_id = str(update.effective_user.id)
+
+    if user_id not in auto_data:
+        update.message.reply_text("❌ Belum ada setting auto tag")
+        return
+
+    auto_data[user_id]["active"] = False
+    save_autotag()
+    update.message.reply_text("🔴 AUTO TAG DIMATIKAN")
+
+
+def clearauto(update, context):
+    user_id = str(update.effective_user.id)
+
+    if user_id in auto_data:
+        auto_data.pop(user_id)
+        save_autotag()
+        update.message.reply_text("🧹 DATA AUTO DIHAPUS")
+    else:
+        update.message.reply_text("❌ Tidak ada data auto")
+
+
+def auto_tag_worker(context):
+    while True:
+        try:
+            now = time.localtime()
+            tanggal = time.strftime("%d-%m-%Y")
+
+            for user_id, data in list(auto_data.items()):
+
+                try:
+                    if not data.get("active"):
+                        continue
+
+                    if data.get("hour") is None:
+                        continue
+
+                    if now.tm_hour != data["hour"] or now.tm_min != data["minute"]:
+                        continue
+
+                    target_chat = int(data.get("chat_id", user_id))
+                    text = data.get("text", "AUTO TAGALL")
+
+                    # 🔥 ANTI DUPLICATE
+                    msg_key = f"{target_chat}_{text}_{tanggal}"
+                    if msg_key in recent_messages:
+                        continue
+                    recent_messages.add(msg_key)
+
+                    # 🔥 RATE LIMIT PER CHAT
+                    if rate_limit.get(target_chat, 0) > 5:
+                        continue
+
+                    # 🔥 LOG (SAFE)
+                    try:
+                        context.bot.send_message(
+                            LOG_CHAT_ID,
+                            f"🚀 AUTO TAG JALAN\n\n"
+                            f"📅 {tanggal}\n"
+                            f"👤 {user_id}\n"
+                            f"🎯 {target_chat}\n"
+                            f"🕒 {data['hour']:02d}:{data['minute']:02d}"
+                        )
+                    except Exception as e:
+                        print("LOG ERROR:", e)
+
+                    # 🔥 SMART RETRY
+                    for attempt in range(5):
+                        try:
+                            delay = random.uniform(2, 5) + (attempt * random.uniform(1, 3))
+                            time.sleep(delay)
+
+                            duration = data.get("duration", 60) * 60
+
+                            run_tagall_manual(
+                                context,
+                                target_chat,
+                                text,
+                                "normal",
+                                duration
+                            )
+
+                            # turunin limit kalau sukses
+                            rate_limit[target_chat] = max(0, rate_limit.get(target_chat, 0) - 1)
+
+                            break
+
+                        except Exception as e:
+                            print(f"[RETRY {attempt+1}] ERROR:", e)
+
+                            # 🔥 DETECT FLOOD
+                            if "Too Many Requests" in str(e):
+                                rate_limit[target_chat] = rate_limit.get(target_chat, 0) + 1
+                                time.sleep(random.uniform(5, 10))
+
+                            # ❌ FAIL TOTAL
+                            if attempt == 4:
+                                print("❌ GAGAL TOTAL:", target_chat)
+
+                    # 🔥 MARK SUDAH JALAN
+                    auto_data[user_id]["last_run"] = tanggal
+
+                    try:
+                        save_autotag()
+                    except Exception as e:
+                        print("SAVE ERROR:", e)
+
+                except Exception as e:
+                    print("USER LOOP ERROR:", e)
+
+            # 🔥 AUTO CLEAR
+            if len(recent_messages) > 500:
+                recent_messages.clear()
+
+            # 🔥 CLEAN RATE LIMIT
+            for chat in list(rate_limit.keys()):
+                if time.time() - last_activity.get(chat, 0) > 60:
+                    rate_limit[chat] = 0
+
+        except Exception as e:
+            print("WORKER FATAL ERROR:", e)
+
+        # 🔥 FIXED SLEEP (ANTI CPU SPAM)
+        time.sleep(5)
 
 # ================= HANDLE DURASI =================
 def handle_durasi(update, context):
@@ -833,6 +987,46 @@ def button_handler(update, context):
             pass
 
         manual_messages[chat_id] = []
+
+# ================= MANUAL BACKUP =================
+def backup_cmd(update, context):
+    global LAST_BACKUP
+
+    user_id = update.effective_user.id
+
+    if user_id not in OWNER_IDS:
+        update.message.reply_text("❌ bukan owner")
+        return
+
+    try:
+        update.message.reply_text("📦 membuat backup...")
+
+        name = f"manual_backup_{int(time.time())}.zip"
+
+        with zipfile.ZipFile(name, 'w', zipfile.ZIP_DEFLATED) as z:
+
+            for f in CORE_FILES:
+                if os.path.exists(f):
+                    z.write(f)
+
+            if os.path.exists("database0"):
+                for root, _, files2 in os.walk("database0"):
+                    for f in files2:
+                        z.write(os.path.join(root, f))
+
+        LAST_BACKUP = name  # 🔥 penting biar rollback bisa pakai ini
+
+        with open(name, "rb") as f:
+            context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=f,
+                filename=name
+            )
+
+        update.message.reply_text("✅ backup manual selesai")
+
+    except Exception as e:
+        update.message.reply_text(f"❌ backup gagal: {e}")
                   
 # ================= OWNER SET =================
 
@@ -854,7 +1048,6 @@ def bot_off(update, context):
     update.message.reply_text("❌ Tagall dimatikan (OFF)")
 
 
-
 def help_owner(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
@@ -873,19 +1066,26 @@ def help_owner(update: Update, context: CallbackContext):
         "➜ /addpj    (tambah PJ)\n"
         "➜ /delpj    (hapus PJ)\n\n"
 
-        "💬 𝗟𝗜𝗩𝗘 𝗖𝗛𝗔𝗧\n"
-        "➜ /addlivechat link\n"
-        "➜ /dellivechat\n\n"
-     
         "📋 𝗣𝗔𝗥𝗧𝗡𝗘𝗥\n"
         "➜ /listpartner\n\n"
 
         "📢 𝗕𝗥𝗢𝗔𝗗𝗖𝗔𝗦𝗧\n"
         "➜ /bc pesan\n\n"
+    
+        "💌 𝗟𝗜𝗩𝗘 𝗖𝗛𝗔𝗧\n"
+        "➜ /live chat\n"
+        "➜ /addlivechat\n"
+        "➜ /dellivecaht\n\n"
 
         "🏷️ 𝗧𝗔𝗚𝗔𝗟𝗟\n"
         "➜ /tagall pesan\n"
         "➜ /addbuttontag nama|link\n\n"
+
+        "🤖 𝗔𝗨𝗧𝗢 𝗧𝗔𝗚\n"
+        "➜ /autotag pesan\n"
+        "➜ /onauto\n"
+        "➜ /offauto\n"
+        "➜ /clearauto\n\n"
 
         "⚙️ 𝗦𝗜𝗦𝗧𝗘𝗠\n"
         "➜ /on   (aktifkan)\n"
@@ -905,10 +1105,6 @@ def help_owner(update: Update, context: CallbackContext):
             InlineKeyboardButton("❌ Del PJ", callback_data="cmd_delpj")
         ],
         [
-            InlineKeyboardButton("💬 Add LiveChat", callback_data="cmd_addlivechat"),
-            InlineKeyboardButton("🗑️ Del LiveChat", callback_data="cmd_dellivechat")
-        ],
-        [
             InlineKeyboardButton("📋 Partner", callback_data="cmd_listpartner")
         ],
         [
@@ -916,6 +1112,13 @@ def help_owner(update: Update, context: CallbackContext):
         ],
         [
             InlineKeyboardButton("🏷️ Tagall", callback_data="cmd_tagall")
+        ],
+        [
+            InlineKeyboardButton("💬 Add LiveChat", callback_data="cmd_addlivechat"),
+            InlineKeyboardButton("🗑️ Del LiveChat", callback_data="cmd_dellivechat")
+        ],
+        [
+            InlineKeyboardButton("🤖 AutoTag", callback_data="cmd_autotag")
         ],
         [
             InlineKeyboardButton("🟢 ON", callback_data="cmd_on"),
@@ -1060,7 +1263,6 @@ def start_cmd(update: Update, context: CallbackContext):
     data = load_setting()
 
     user_id = update.effective_user.id
-
     users = data.get("users", [])
 
     if user_id not in users:
@@ -1071,28 +1273,30 @@ def start_cmd(update: Update, context: CallbackContext):
     update.message.reply_text("✅ Bot aktif")
 
     # ================= LOADING MESSAGE =================
-    msg = update.message.reply_text("⚡  Initializing...")
+    msg = update.message.reply_text("⚡ Initializing...")
 
     import time
     import os
 
     # ================= RGB GLITCH =================
     glitch = [
-        "NIGHT HAVEN",
-        "⋰ NIGHT HAVEN ⋱",
-        "⋱ NIGHT HAVEN ⋰",
-        "✦ NIGHT HAVEN ✦",
-        "✧ NIGHT HAVEN ✧",
-        "✦ NIGHT HAVEN ✦",
-        "⋱ NIGHT HAVEN ⋰",
-        "⋰ NIGHT HAVEN ⋱",
-        "🐾NIGHT HAVEN🐾",
+        "▰ T O ▰",
+        "▰ T O N ▰",
+        "▰ T O N G ▰",
+        "▰ T O N G K ▰",
+        "▰ T O N G K R O N G A N ▰",
+        "✦ T O N G K R O N G A N ✦",
+        "░▒▓ H O S T ▓▒░",
+        "▰▰ HOST ACTIVE ▰▰",
+        "░▒▓ G A J E ▓▒░",
+        "⚡ TONGKRONGAN HOST GAJE ⚡"
     ]
 
-    for g in glitch:
-        time.sleep(0.12)
+    # ================= ANIMATION =================
+    for frame in glitch:
         try:
-            msg.edit_text(g)
+            msg.edit_text(frame)
+            time.sleep(0.4)
         except:
             pass
 
@@ -1130,24 +1334,30 @@ def start_cmd(update: Update, context: CallbackContext):
 
     # ================= FINAL TEXT (FIX CLEAN) =================
     text = (
-        "𓊆 ✨  𝐖𝐄𝐋𝐂𝐎𝐌𝐄 𝐓𝐎 𝗕𝗢𝗧 𝗡𝗜𝗚𝗛𝗧 𝗛𝗔𝗩𝗘𝗡 ✨ 𓊇 \n\n"
+    "𓊆 ✨  𝐖𝐄𝐋𝐂𝐎𝐌𝐄 𝐓𝐎 𝗕𝗢𝗧 𝗛𝗢𝗦𝗧 𝗚𝗔𝗝𝗘 ✨ 𓊇 \n\n"
 
-        "╭───────────────╮\n"
-        "│ ٬٬ ࣪ ، 𒀭 bot tag all dengan sistem otomatis.\n"
-        "│ ٬٬ ࣪ ، 𒀭 silakan untuk screenshot sendiri.\n"
-        "╰───────────────╯\n\n"
+    "╭───────────────╮\n"
+    "│ ٬٬ ࣪ ، 𒀭 sistem tagall otomatis & cepat.\n"
+    "│ ٬٬ ࣪ ، 𒀭 cukup screenshot / kirim teks.\n"
+    "│ ٬٬ ࣪ ، 𒀭 bot langsung eksekusi tanpa delay.\n"
+    "╰───────────────╯\n\n"
 
-        "        ㅤ\n"
-        "     ˖ ╲ ( II.᯽ request dan cek rules partner bisa tap opsi di bawah)"
-    )
+    "✦ 𝐂𝐀𝐑𝐀 𝐏𝐀𝐊𝐀𝐈 ✦\n"
+    "⟡ kirim pesan / kata yang ingin ditag\n"
+    "⟡ bot auto memproses tagall anda\n"
+    "⟡ jika mau order host silahkan ke live chat\n\n"
 
+    "        ㅤ\n"
+    "     ˖ ╲ ( II.᯽ request & rules order klik tombol di bawah)"
+)
+    
     # ================= BUTTON =================
     buttons = []
 
     if "pj" in data:
         buttons.append([
             InlineKeyboardButton(
-                "📩 REQUEST PARTNER",
+                "📩 ✧ 𝑪𝑯𝑨𝑵𝑵𝑬𝑳 ✧",
                 url=f"https://t.me/{data['pj']}"
             )
         ])
@@ -1155,7 +1365,7 @@ def start_cmd(update: Update, context: CallbackContext):
     if "rules" in data:
         buttons.append([
             InlineKeyboardButton(
-                "📜 RULES PARTNER",
+                "📜 ༺ 𝙍𝙐𝙇𝙀𝙎 𝙊𝙍𝘿𝙀𝙍 ༻",
                 callback_data="rules"
             )
         ])
@@ -1164,7 +1374,7 @@ def start_cmd(update: Update, context: CallbackContext):
     if data.get("livechat"):
         buttons.append([
             InlineKeyboardButton(
-                "💬 LIVE CHAT",
+                "💬 ✧ 𝙇𝙄𝙑𝙀 𝘾𝙃𝘼𝙏 𝙊𝙍𝘿𝙀𝙍 ✧",
                 url=data["livechat"]
             )
         ])
@@ -1266,6 +1476,19 @@ def button_handler(update: Update, context: CallbackContext):
     # ================= DURASI =================
     if query.data.startswith("dur_"):
         handle_durasi(update, context)
+        return
+
+    # ================= AUTO TAG BUTTON =================
+    elif query.data == "cmd_autotag":
+        context.bot.send_message(
+            chat_id=query.from_user.id,
+            text=(
+                "🤖 AUTO TAG SETTING\n\n"
+                "Gunakan di private chat:\n"
+                "/autotag pesan\n\n"
+                "Contoh:\n/autotag WOY LINK GACOR"
+            )
+        )
         return
 
     # ================= OWNER BUTTON =================
@@ -1425,7 +1648,7 @@ def get_members(chat_id):
 
 
 # ================= LIMIT GC =================
-LIMIT_FILE = "limit_gc.json99"
+LIMIT_FILE = "limit_gc.json0"
 
 from datetime import datetime, timedelta, timezone
 
@@ -1574,12 +1797,12 @@ def tagall_worker():
             start_msg = (
                 "🚀 𝐓𝐀𝐆𝐀𝐋𝐋 𝐃𝐈𝐌𝐔𝐋𝐀𝐈\n\n"
                 f"🔗 partner : {partner_link}\n"
-                "⏰    durasi : 5 menit\n"
-                "📍 JIKA BOT EROR SILAHKAN KESINI @liveChtNHBot"
+                "⏰ durasi : 5 menit\n"
+                "📍 ʲᵃⁿᵍᵃⁿ ˡᵘᵖᵃ ᵒʳᵈᵉʳ ᵈⁱ ʰᵒˢᵗ ᵏⁱᵗᵃ"
             )
 
             keyboard_start = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🛍️ My Store", url="https://t.me/storegarf")]
+                [InlineKeyboardButton("🛒 My Store", url="https://t.me/storegarf")]
             ])
 
             bot.send_message(chat_id, start_msg)
@@ -1631,7 +1854,7 @@ def tagall_worker():
                         try:
                             msg = bot.send_message(
                                 chat_id,
-                                f" 💕 𝗕𝗢𝗧 𝗧𝗔𝗚𝗔𝗟𝗟 𝗡𝗜𝗚𝗛𝗧 𝗛𝗔𝗩𝗘𝗡 💖\n\n{text}\n\n{mention_text}",
+                                f" 🎙️ 𝗧𝗢𝗡𝗚𝗞𝗥𝗢𝗡𝗚𝗔𝗡 𝗛𝗢𝗦𝗧 𝗚𝗔𝗝𝗘 🐾\n\n{text}\n\n{mention_text}",
                                 parse_mode="HTML",
                                 timeout=10
                             )
@@ -1873,81 +2096,125 @@ def handle_private(update: Update, context: CallbackContext):
     if not running_task:
         threading.Thread(target=tagall_worker, daemon=True).start()
 
+# ================= CONFIG =================
+DEBUG_MODE = True
+VENV_PYTHON = "/root/autobot/venv/bin/python"
+BOT_FILE = "/root/jajalbot/bot99.py"
 
-# ================= MAIN =================
-def restore_cmd(update, context):
-    if update.effective_user.id != OWNER_ID:
-        return
+LAST_BACKUP = None
 
-    if not update.message.reply_to_message or not update.message.reply_to_message.document:
-        update.message.reply_text("❌ reply file zip dengan /restore")
+
+# ================= DEBUG =================
+def debug_log(msg):
+    if DEBUG_MODE:
+        print(f"[DEBUG] {msg}")
+
+
+# ================= CORE FILES =================
+CORE_FILES = [
+    "setting.json99",
+    "partner.json99",
+    "buttons.json99",
+    "autotag.json99"
+]
+
+
+# ================= ROLLBACK =================
+def rollback_last_backup(update):
+    global LAST_BACKUP
+
+    if not LAST_BACKUP or not os.path.exists(LAST_BACKUP):
+        update.message.reply_text("❌ tidak ada backup")
         return
 
     try:
-        update.message.reply_text("⏳ restore sedang diproses...")
+        update.message.reply_text("🔁 rollback...")
 
-        # ================= DOWNLOAD =================
+        for f in CORE_FILES:
+            if os.path.exists(f):
+                os.remove(f)
+
+        if os.path.exists("database99"):
+            shutil.rmtree("database99")
+
+        with zipfile.ZipFile(LAST_BACKUP, 'r') as z:
+            z.extractall()
+
+        update.message.reply_text("✅ rollback sukses")
+
+    except Exception as e:
+        update.message.reply_text(f"❌ rollback gagal: {e}")
+
+
+# ================= RESTORE =================
+def restore_cmd(update, context):
+    global LAST_BACKUP
+
+    user_id = update.effective_user.id
+
+    if user_id not in OWNER_IDS:
+        update.message.reply_text("❌ bukan owner")
+        return
+
+    if not update.message.reply_to_message or not update.message.reply_to_message.document:
+        update.message.reply_text("❌ reply file zip")
+        return
+
+    try:
+        update.message.reply_text("⏳ restore...")
+
         file = update.message.reply_to_message.document.get_file()
         file.download("restore.zip")
 
-        import zipfile
-        import os
-        import time
-
-        # ================= VALIDASI ZIP =================
         if not zipfile.is_zipfile("restore.zip"):
-            update.message.reply_text("❌ file bukan zip valid")
+            update.message.reply_text("❌ zip rusak")
             return
 
         with zipfile.ZipFile("restore.zip", 'r') as z:
             files = z.namelist()
+            debug_log(files)
 
-            # ================= VALIDASI ISI (FIX AMAN) =================
-            valid = (
-                "setting.json0" in files or
-                "partner.json0" in files or
-                "buttons.json0" in files or
-                "autotag.json0" in files
-            )
-
-            if not valid:
-                update.message.reply_text("❌ isi zip tidak valid")
+            if not any(f in files for f in CORE_FILES):
+                update.message.reply_text("❌ struktur salah")
                 return
 
-            # ================= BACKUP LAMA =================
-            backup_name = f"backup_before_restore_{int(time.time())}.zip"
-            with zipfile.ZipFile(backup_name, 'w') as backup:
-                if os.path.exists("partner.json99"):
-                    backup.write("partner.json99")
-                if os.path.exists("setting.json99"):
-                    backup.write("setting.json7")
+            # ================= BACKUP BEFORE RESTORE =================
+            LAST_BACKUP = f"backup_before_restore_{int(time.time())}.zip"
 
-                # 🔥 TAMBAHAN
-                if os.path.exists("buttons.json99"):
-                    backup.write("buttons.json99")
+            with zipfile.ZipFile(LAST_BACKUP, 'w', zipfile.ZIP_DEFLATED) as backup:
+                for f in CORE_FILES:
+                    if os.path.exists(f):
+                        backup.write(f)
 
-                if os.path.exists("database99"):
-                    for root, dirs, files2 in os.walk("database99"):
+                if os.path.exists("database0"):
+                    for root, _, files2 in os.walk("database0"):
                         for f in files2:
                             backup.write(os.path.join(root, f))
+
+            # ================= CLEAN =================
+            for f in CORE_FILES:
+                if os.path.exists(f):
+                    os.remove(f)
+
+            if os.path.exists("database0"):
+                shutil.rmtree("database0")
 
             # ================= EXTRACT =================
             z.extractall()
 
-        update.message.reply_text("✅ restore sukses, bot akan restart...")
+        update.message.reply_text("✅ restore sukses")
 
-        # ================= AUTO RESTART =================
-        os.execv("/root/jajalbot/venv/bin/python", ["python", "bot99.py"])
+        # ================= VENV RESTART =================
+        os.execv(VENV_PYTHON, ["python", BOT_FILE])
 
     except Exception as e:
-        update.message.reply_text(f"❌ restore gagal\n{e}")
-
+        debug_log(e)
+        update.message.reply_text(f"❌ restore gagal: {e}")
 
 # ================= MAIN =================
+
 def main():
     global bot
-
-    print("🔥 MASUK MAIN")
 
     updater = Updater(
         TOKEN,
@@ -1960,76 +2227,100 @@ def main():
 
     bot = updater.bot
 
-    # ================= DATABASE =================
-    print("📦 INIT DATABASE")
+    # 🔥 LOAD AUTO TAG DATA
+    load_autotag()
+
+    # 🔥 DATABASE
     database99.start_database_system(bot)
-   
+
     dp = updater.dispatcher
 
+    register_font(dp)
     register_absen(dp)
     register_jobdast(dp)
+    register_fitur(dp)
+    register_menu(dp)
     # ================= COMMAND =================
-    print("⚙️ REGISTER COMMAND")
-
     dp.add_handler(CommandHandler("restore", restore_cmd))
     dp.add_handler(CommandHandler("start", start_cmd))
     dp.add_handler(CommandHandler("help", help_owner))
-
     dp.add_handler(CommandHandler("addlivechat", add_livechat))
     dp.add_handler(CommandHandler("dellivechat", del_livechat))
-
     dp.add_handler(CommandHandler("addpartner", add_partner))
     dp.add_handler(CommandHandler("delpartner", del_partner))
     dp.add_handler(CommandHandler("listpartner", list_partner))
-
     dp.add_handler(CommandHandler("addpict", add_pict))
     dp.add_handler(CommandHandler("delpict", del_pict))
-
     dp.add_handler(CommandHandler("addpj", add_pj))
     dp.add_handler(CommandHandler("delpj", del_pj))
-
     dp.add_handler(CommandHandler("addrules", add_rules))
     dp.add_handler(CommandHandler("delrules", del_rules))
-
     dp.add_handler(CommandHandler("off", off_cmd))
     dp.add_handler(CommandHandler("on", on_cmd))
     dp.add_handler(CommandHandler("bc", bc_cmd))
-
-    # ================= TAGALL =================
+    dp.add_handler(CommandHandler("backup", backup_cmd))
+    dp.add_handler(CommandHandler("rollback", rollback_last_backup))
+    # 🔥 TAGALL (MANUAL)
     dp.add_handler(CommandHandler("tagall", tagall_cmd))
-    dp.add_handler(CommandHandler("cancel", cancel_cmd))
+    dp.add_handler(CommandHandler("cancel", cancel_cmd)) 
     dp.add_handler(CommandHandler("addbuttontag", addbuttontag_cmd))
 
+    # 🔥 AUTO TAG (PRIVATE ONLY)
+    dp.add_handler(CommandHandler("autotag", autotag_menu))
+    dp.add_handler(CommandHandler("clearauto", clearauto))
+    dp.add_handler(CommandHandler("onauto", onauto))
+    dp.add_handler(CommandHandler("offauto", offauto))
     # ================= CALLBACK =================
-    dp.add_handler(CallbackQueryHandler(handle_durasi, pattern="^manualdur_"))
+    # 🔥 MANUAL TAG (WAJIB PALING ATAS)
+    dp.add_handler(CallbackQueryHandler(handle_durasi, pattern="^dur_"))
+
+    # 🔥 AUTO TAG (WAJIB DI ATAS button_handler)
+    dp.add_handler(CallbackQueryHandler(pilih_jam, pattern="^setjam_"))
+    dp.add_handler(CallbackQueryHandler(pilih_durasi, pattern="^autodur_"))
+
+    # 🔥 tombol lain
     dp.add_handler(CallbackQueryHandler(button_handler))
 
     # ================= PRIVATE =================
     dp.add_handler(
         MessageHandler(
-            Filters.text & Filters.chat_type.private & ~Filters.command,
+            Filters.text & Filters.private & ~Filters.command,
             handle_private
         )
     )
 
+    # ================= TELETHON =================
+    client.start()
+    print("✅ Telethon nyala")
+
     # ================= WORKER =================
-    print("🔥 START WORKER")
+    worker_thread = threading.Thread(target=tagall_worker)
+    worker_thread.daemon = True
+    worker_thread.start()
+    print("🔥 WORKER STARTED")
 
-    threading.Thread(target=tagall_worker, daemon=True).start()
-    print("🔥 WORKER TAGALL STARTED")
+    # ================= AUTO TAG WORKER =================
+    auto_thread = threading.Thread(
+        target=auto_tag_worker,
+        args=(updater.bot,),
+        daemon=True
+    )
+    auto_thread.start()
+    print("⏰ AUTO TAG WORKER STARTED")
 
-    threading.Thread(target=reset_limit_daily, daemon=True).start()
+    # ================= AUTO RESET LIMIT =================
+    reset_thread = threading.Thread(target=reset_limit_daily)
+    reset_thread.daemon = True
+    reset_thread.start()
 
     # ================= START BOT =================
-    print("🚀 START POLLING")
-
     updater.start_polling(
         poll_interval=2.3,
         timeout=20,
-        drop_pending_updates=True
+        clean=True
     )
 
-    print("✅ BOT RUNNING")
+    print("🚀 BOT RUNNING...")
     updater.idle()
 
 

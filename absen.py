@@ -1,10 +1,11 @@
-# ================= ABSEN BOT SYSTEM (FINAL UPGRADE) =================
+# ================= ABSEN BOT SYSTEM (PRO SAFE PTB 13.15) =================
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+from telegram.ext import CommandHandler, CallbackQueryHandler
 from datetime import datetime
 import pytz
 import sqlite3
+import pesan  # motivasi eksternal
 
 WIB = pytz.timezone("Asia/Jakarta")
 
@@ -20,10 +21,13 @@ CREATE TABLE IF NOT EXISTS absen (
     name TEXT,
     type TEXT,
     alasan TEXT,
-    date TEXT
+    date TEXT,
+    time TEXT
 )
 """)
 db.commit()
+
+# ================= MEMORY =================
 
 absen_msg = {}
 pending_izin = {}
@@ -35,84 +39,105 @@ last_week = None
 # ================= SAVE =================
 
 def save_absen(chat_id, user_id, name, tipe, alasan=None):
+    now = datetime.now(WIB)
+
     cur.execute("""
-        INSERT INTO absen (chat_id, user_id, name, type, alasan, date)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (chat_id, user_id, name, tipe, alasan, datetime.now(WIB).strftime("%Y-%m-%d")))
+        INSERT INTO absen (chat_id, user_id, name, type, alasan, date, time)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        chat_id,
+        user_id,
+        name,
+        tipe,
+        alasan,
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M")
+    ))
     db.commit()
 
 
 # ================= LOAD =================
 
 def load_absen(chat_id):
-    cur.execute("SELECT name, type, alasan FROM absen WHERE chat_id=?", (chat_id,))
+    cur.execute(
+        "SELECT name, type, alasan, time FROM absen WHERE chat_id=?",
+        (chat_id,)
+    )
     rows = cur.fetchall()
 
     data = {"hadir": [], "izin": [], "sakit": []}
 
-    for name, tipe, alasan in rows:
+    for name, tipe, alasan, time in rows:
         if tipe == "hadir":
-            data["hadir"].append(name)
-        elif tipe == "sakit":
-            data["sakit"].append(name)
+            data["hadir"].append((name, time))
         elif tipe == "izin":
-            data["izin"].append((name, alasan))
+            data["izin"].append((name, alasan, time))
+        elif tipe == "sakit":
+            data["sakit"].append((name, time))
 
     return data
 
 
-# ================= UI STYLE (ESTETIK MAHAL) =================
+# ================= FORMAT =================
 
 def format_absen(chat_id):
     data = load_absen(chat_id)
     now = datetime.now(WIB)
 
     total = len(data["hadir"]) + len(data["izin"]) + len(data["sakit"])
+    motivasi = pesan.get_quote()
 
     text = f"""
-╔════════════════════════════════╗
-        ✦ ATTENDANCE REPORT ✦
-╚════════════════════════════════╝
+╔════════════════════════════════════╗
+        ✦ 𝗔𝗧𝗧𝗘𝗡𝗗𝗔𝗡𝗖𝗘 𝗟𝗜𝗩𝗘 ✦
+╚════════════════════════════════════╝
 
-📅 {now.strftime('%A, %d %B %Y')}
-────────────────────────────────
-📊 STATUS SUMMARY
+📅 𝘋𝘢𝘺 : {now.strftime('%A, %d %B %Y')}
+⏰ 𝘛𝘪𝘮𝘦 : {now.strftime('%H:%M WIB')}
 
-🟢 HADIR   ▰▰▰ {len(data['hadir'])}
-🟡 IZIN    ▰ {len(data['izin'])}
-🔴 SAKIT   ▰ {len(data['sakit'])}
+────────────────────────────────────
 
-👥 TOTAL PARTICIPANTS : {total}
-────────────────────────────────
-🏷 PARTICIPANT LOG
+🧠 𝗦𝗬𝗦𝗧𝗘𝗠 𝗦𝗧𝗔𝗧𝗨𝗦
+✨ 𝘓𝘪𝘷𝘦 𝘔𝘰𝘯𝘪𝘵𝘰𝘳𝘪𝘯𝘨 𝘈𝘤𝘵𝘪𝘷𝘦
+
+🟢 𝗛𝗔𝗗𝗜𝗥 : {len(data['hadir'])}
+🟡 𝗜𝗭𝗜𝗡  : {len(data['izin'])}
+🔴 𝗦𝗔𝗞𝗜𝗧 : {len(data['sakit'])}
+
+👥 𝗧𝗢𝗧𝗔𝗟 : {total} 𝗣𝗘𝗢𝗣𝗟𝗘
+
+────────────────────────────────────
+
+📡 𝗟𝗜𝗩𝗘 𝗟𝗢𝗚
 """
 
-    no = 1
+    for n, t in data["hadir"]:
+        text += f"\n➤ 🟢 {n}  ✦ ACTIVE  ⏰ {t}"
 
-    for n in data["hadir"]:
-        text += f"\n➤ 🟢 {n}"
-        no += 1
+    for n, a, t in data["izin"]:
+        text += f"\n➤ 🟡 {n}  ✦ LEAVE  ⏰ {t}\n   └ 💬 {a}"
 
-    for n, a in data["izin"]:
-        text += f"\n➤ 🟡 {n}\n   └ reason: {a}"
-
-    for n in data["sakit"]:
-        text += f"\n➤ 🔴 {n}\n   └ status: sick"
+    for n, t in data["sakit"]:
+        text += f"\n➤ 🔴 {n}  ✦ OFFLINE  ⏰ {t}"
 
     if total == 0:
-        text += "\nBelum ada absensi."
+        text += "\n\n⚠️ Belum ada aktivitas hari ini..."
 
     text += f"""
 
-────────────────────────────────
-⚡ SYSTEM STATUS: ACTIVE
-🛍️ My STORE : @storegarf
-╚════════════════════════════════╝
+────────────────────────────────────
+
+💬 𝗠𝗢𝗧𝗜𝗩𝗔𝗦𝗜 𝗛𝗔𝗥𝗜 𝗜𝗡𝗜
+“{motivasi}”
+
+🔥 Stay consistent, not only active.
+
+╚════════════════════════════════════╝
 """
     return text
 
 
-# ================= BUTTON =================
+# ================= KEYBOARD =================
 
 def get_keyboard():
     return InlineKeyboardMarkup([
@@ -122,9 +147,23 @@ def get_keyboard():
             InlineKeyboardButton("🔴 SAKIT", callback_data="absen_sakit"),
         ],
         [
-            InlineKeyboardButton("🛍️ STORE", url="https://t.me/storegarf")
+            InlineKeyboardButton("🛍 STORE", url="https://t.me/storegarf")
         ]
     ])
+
+
+# ================= SAFE PIN =================
+
+def safe_pin(context, chat_id, msg_id):
+    try:
+        context.bot.unpin_chat_message(chat_id)
+    except:
+        pass
+
+    try:
+        context.bot.pin_chat_message(chat_id, msg_id, disable_notification=True)
+    except:
+        pass
 
 
 # ================= DAILY RESET =================
@@ -132,33 +171,34 @@ def get_keyboard():
 def daily_reset(context):
     global last_day
 
-    now = datetime.now(WIB).strftime("%Y-%m-%d")
+    today = datetime.now(WIB).strftime("%Y-%m-%d")
 
-    if last_day == now:
+    if last_day == today:
         return
 
     chats = cur.execute("SELECT DISTINCT chat_id FROM absen").fetchall()
 
     for (chat_id,) in chats:
         try:
-            text = "📊 REKAP HARI KEMARIN\n\n" + format_absen(chat_id)
-            context.bot.send_message(chat_id, text)
+            context.bot.send_message(
+                chat_id,
+                "📊 DAILY REKAP\n\n" + format_absen(chat_id)
+            )
         except:
             pass
 
     cur.execute("DELETE FROM absen")
     db.commit()
 
-    last_day = now
+    last_day = today
 
 
-# ================= WEEKLY REPORT =================
+# ================= WEEKLY RESET =================
 
-def weekly_report(context):
+def weekly_reset(context):
     global last_week
 
-    now = datetime.now(WIB)
-    week = now.strftime("%Y-%W")
+    week = datetime.now(WIB).strftime("%Y-%W")
 
     if last_week == week:
         return
@@ -167,27 +207,10 @@ def weekly_report(context):
 
     for (chat_id,) in chats:
         try:
-            cur.execute("""
-                SELECT name, COUNT(*) as total
-                FROM absen
-                WHERE chat_id=? AND type='hadir'
-                GROUP BY user_id
-                ORDER BY total DESC
-                LIMIT 10
-            """, (chat_id,))
-
-            rows = cur.fetchall()
-
-            text = "🏆 REKAP MINGGUAN TERAKTIF\n\n"
-
-            if not rows:
-                text += "Belum ada data minggu ini."
-            else:
-                for i, (name, total) in enumerate(rows, 1):
-                    text += f"{i}. {name} - {total}x hadir\n"
-
-            context.bot.send_message(chat_id, text)
-
+            context.bot.send_message(
+                chat_id,
+                "🏆 WEEKLY REPORT\n\n" + format_absen(chat_id)
+            )
         except:
             pass
 
@@ -198,14 +221,9 @@ def weekly_report(context):
 
 def absen_cmd(update, context):
     daily_reset(context)
+    weekly_reset(context)
 
     chat_id = update.effective_chat.id
-
-    if chat_id in absen_msg:
-        try:
-            context.bot.unpin_chat_message(chat_id, absen_msg[chat_id])
-        except:
-            pass
 
     msg = update.message.reply_text(
         format_absen(chat_id),
@@ -213,44 +231,44 @@ def absen_cmd(update, context):
     )
 
     absen_msg[chat_id] = msg.message_id
-
-    try:
-        context.bot.pin_chat_message(chat_id, msg.message_id, disable_notification=True)
-    except:
-        pass
+    safe_pin(context, chat_id, msg.message_id)
 
 
-# ================= BUTTON HANDLER =================
+# ================= CALLBACK =================
 
 def absen_button(update, context):
     daily_reset(context)
+    weekly_reset(context)
 
     query = update.callback_query
     query.answer()
 
     user = query.from_user
     chat_id = query.message.chat.id
+    tipe = query.data.split("_")[1]
 
-    data = query.data.split("_")[1]
+    cur.execute(
+        "SELECT 1 FROM absen WHERE chat_id=? AND user_id=?",
+        (chat_id, user.id)
+    )
 
-    cur.execute("SELECT 1 FROM absen WHERE chat_id=? AND user_id=?", (chat_id, user.id))
     if cur.fetchone():
         return query.answer("❌ Sudah absen", show_alert=True)
 
-    if data == "hadir":
+    if tipe == "hadir":
         save_absen(chat_id, user.id, user.first_name, "hadir")
 
-    elif data == "sakit":
+    elif tipe == "sakit":
         save_absen(chat_id, user.id, user.first_name, "sakit")
 
-    elif data == "izin":
+    elif tipe == "izin":
         pending_izin[user.id] = chat_id
         return query.message.reply_text("🟡 Kirim alasan izin:")
 
     try:
         context.bot.edit_message_text(
             chat_id=chat_id,
-            message_id=absen_msg[chat_id],
+            message_id=absen_msg.get(chat_id),
             text=format_absen(chat_id),
             reply_markup=get_keyboard()
         )
@@ -258,28 +276,21 @@ def absen_button(update, context):
         pass
 
 
-# ================= IZIN =================
+# ================= IZIN HANDLER =================
 
 def izin_handler(update, context):
-    daily_reset(context)
-
     user = update.effective_user
     chat_id = update.effective_chat.id
 
-    if user.id not in pending_izin:
-        return
-
-    if pending_izin[user.id] != chat_id:
+    if pending_izin.get(user.id) != chat_id:
         return
 
     save_absen(chat_id, user.id, user.first_name, "izin", update.message.text)
-
     del pending_izin[user.id]
 
 
-# ================= REGISTER FIX =================
+# ================= REGISTER =================
 
 def register_absen(app):
     app.add_handler(CommandHandler("absen", absen_cmd))
-    app.add_handler(CallbackQueryHandler(absen_button, pattern="absen_"))
-    app.add_handler(MessageHandler(Filters.text & ~Filters.command, izin_handler))
+    app.add_handler(CallbackQueryHandler(absen_button, pattern="^absen_"))

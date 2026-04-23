@@ -395,36 +395,109 @@ def cancel_cmd(update, context):
         pass
         
 
+# ================= LIST COMMAND =================
 def list_partner(update, context):
+    print("🔥 list_partner kepanggil")
+
     if update.effective_user.id not in OWNER_IDS:
         return
 
+    send_partner_page_message(update, context, 0)
+
+
+# ================= SEND (FROM COMMAND) =================
+def send_partner_page_message(update, context, page):
     data = load_partner()
 
     if not data:
         update.message.reply_text("❌ kosong")
         return
 
-    text = "📋 𝐋𝐈𝐒𝐓 𝐏𝐀𝐑𝐓𝐍𝐄𝐑\n\n"
+    total = len(data)
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
 
-    def send_chunk(msg):
-        update.message.reply_text(msg)
+    text = f"📋 LIST PARTNER\nHalaman {page+1}\n\n"
 
-    chunk = ""
+    for i, p in enumerate(data[start:end], start + 1):
+        text += f"{i}. {p.get('name','-')}\n{p.get('link','-')}\n\n"
 
-    for i, p in enumerate(data, 1):
-        item = f"〔{i}〕 {p.get('name','-')}\n🔗 {p.get('link','-')}\n\n"
+    buttons = build_buttons(page, total)
 
-        # kalau udah hampir limit, kirim dulu
-        if len(chunk) + len(item) > 3500:
-            send_chunk(chunk)
-            chunk = item
-        else:
-            chunk += item
+    update.message.reply_text(text, reply_markup=buttons)
 
-    # kirim sisa
-    if chunk:
-        send_chunk(chunk)
+
+# ================= SEND (FROM CALLBACK MENU) =================
+def send_partner_page_callback(query, context, page):
+    data = load_partner()
+
+    if not data:
+        query.message.reply_text("❌ kosong")
+        return
+
+    total = len(data)
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
+
+    text = f"📋 LIST PARTNER\nHalaman {page+1}\n\n"
+
+    for i, p in enumerate(data[start:end], start + 1):
+        text += f"{i}. {p.get('name','-')}\n{p.get('link','-')}\n\n"
+
+    buttons = build_buttons(page, total)
+
+    query.message.reply_text(text, reply_markup=buttons)
+
+
+# ================= BUILD BUTTON =================
+def build_buttons(page, total):
+    buttons = []
+
+    if page > 0:
+        buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"partner_{page-1}"))
+
+    if (page + 1) * PAGE_SIZE < total:
+        buttons.append(InlineKeyboardButton("➡️ Next", callback_data=f"partner_{page+1}"))
+
+    buttons.append(InlineKeyboardButton("❌ Close", callback_data="partner_close"))
+
+    return InlineKeyboardMarkup([buttons])
+
+
+# ================= CALLBACK PARTNER =================
+def partner_callback(update, context):
+    print("🔥 CALLBACK PARTNER")
+
+    query = update.callback_query
+    query.answer()
+
+    data = query.data
+    print("DATA:", data)
+
+    if data == "partner_close":
+        query.message.delete()
+        return
+
+    try:
+        page = int(data.split("_")[1])
+    except:
+        return
+
+    data_list = load_partner()
+    total = len(data_list)
+
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
+
+    text = f"📋 LIST PARTNER\nHalaman {page+1}\n\n"
+
+    for i, p in enumerate(data_list[start:end], start + 1):
+        text += f"{i}. {p.get('name','-')}\n{p.get('link','-')}\n\n"
+
+    buttons = build_buttons(page, total)
+
+    query.edit_message_text(text, reply_markup=buttons)
+    
 
 def addbuttontag_cmd(update, context):
     print("🔥 addbuttontag kepanggil")

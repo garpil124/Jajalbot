@@ -22,6 +22,8 @@ from jobdast import register_jobdast
 from fitur import register_fitur
 from user import register_menu
 
+PAGE_SIZE = 10
+
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 

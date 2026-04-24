@@ -1520,27 +1520,33 @@ def auto_delete_messages(chat_id, message_ids):
 
             
  # ================= WORKER =================
-def tagall_worker():
+ def tagall_worker():
     global running_task
     print("🔥 WORKER HIDUP")
 
     while True:
         chat_id, text, user_id = task_queue.get()
 
+        # 🔥 LOG MASUK TASK
+        send_logs_raw(
+            f"📥 TASK MASUK\n"
+            f"User: <code>{user_id}</code>\n"
+            f"Chat: <code>{chat_id}</code>"
+        )
+
         # ================= WORKER OFF =================
         if not WORKER_ACTIVE:
             try:
-                bot.send_message(
-                    user_id,
-                    "❌ Maaf lagi close tagall dulu"
-                )
+                bot.send_message(user_id, "❌ Maaf lagi close tagall dulu")
             except:
                 pass
+
+            send_logs_raw("⛔ WORKER OFF - TASK DITOLAK")
 
             task_queue.task_done()
             continue
 
-        # ================= LIMIT GC =================
+        # ================= LIMIT =================
         limit_data = load_limit()
         today = get_today_wib()
 
@@ -1549,13 +1555,18 @@ def tagall_worker():
         partner_key = normalize_link(partner_link)
 
         if limit_data.get(partner_key) == today:
+            send_logs_raw(
+                f"⛔ LIMIT PARTNER\n"
+                f"User: <code>{user_id}</code>\n"
+                f"Partner: {partner_link}"
+            )
             task_queue.task_done()
             continue
 
         print("🔥 AMBIL TASK:", user_id)
 
         try:
-            # 🔥 FIX ANTRIAN
+            # ================= ANTRIAN =================
             if user_queue and user_queue[0] != user_id:
                 time.sleep(0.3)
                 task_queue.task_done()
@@ -1563,6 +1574,14 @@ def tagall_worker():
 
             running_task = True
             print("🚀 PROSES USER:", user_id)
+
+            # 🔥 LOG START TAGALL
+            send_logs_raw(
+                f"🚀 TAGALL START\n"
+                f"User: <code>{user_id}</code>\n"
+                f"Chat: <code>{chat_id}</code>\n"
+                f"Partner: {partner_link}"
+            )
 
             start_msg = (
                 "🚀 𝐓𝐀𝐆𝐀𝐋𝐋 𝐃𝐈𝐌𝐔𝐋𝐀𝐈\n\n"
@@ -1584,7 +1603,11 @@ def tagall_worker():
             sent = 0
 
             members = get_members(chat_id)
+
             if not members:
+                send_logs_raw(
+                    f"⚠️ MEMBER KOSONG\nChat: <code>{chat_id}</code>"
+                )
                 task_queue.task_done()
                 continue
 
@@ -1599,6 +1622,66 @@ def tagall_worker():
             duration = 300
 
             last_success_time = time.time()
+
+            # ================= LOOP TAG =================
+            for i in range(0, total, BATCH_SIZE):
+                batch = user_ids[i:i+BATCH_SIZE]
+
+                mention_text = ""
+                for uid in batch:
+                    mention_text += f"<a href='tg://user?id={uid}'>.</a> "
+
+                try:
+                    msg = bot.send_message(
+                        chat_id,
+                        mention_text,
+                        parse_mode="HTML"
+                    )
+                    sent_messages.append(msg.message_id)
+                    sent += len(batch)
+
+                    update_progress(user_id, sent, total)
+                    last_success_time = time.time()
+
+                except Exception as e:
+                    send_logs_raw(
+                        f"⚠️ GAGAL SEND\nChat: <code>{chat_id}</code>\n<code>{e}</code>"
+                    )
+
+                time.sleep(BASE_DELAY)
+
+                # ⏰ STOP BY DURATION
+                if time.time() - start_time > duration:
+                    break
+
+            # ================= SELESAI =================
+            send_logs_raw(
+                f"✅ TAGALL SELESAI\n"
+                f"User: <code>{user_id}</code>\n"
+                f"Hasil: {sent}/{total}"
+            )
+
+            # AUTO DELETE
+            threading.Thread(
+                target=auto_delete_messages,
+                args=(chat_id, sent_messages)
+            ).start()
+
+        except Exception as e:
+            import traceback
+
+            error_text = traceback.format_exc()
+
+            send_logs_raw(
+                f"🚨 ERROR TAGALL\n"
+                f"User: <code>{user_id}</code>\n"
+                f"Chat: <code>{chat_id}</code>\n"
+                f"<code>{error_text}</code>"
+            )
+
+        finally:
+            running_task = False
+            task_queue.task_done()
 
             # ================= LOOP TAG =================
             while time.time() - start_time < duration:

@@ -38,6 +38,18 @@ api_id = 33370509
 api_hash = "669af6caebf2aca264b16cf8b40d37b2"
 client = TelegramClient("session_new99", api_id, api_hash)
 
+
+def send_logs_raw(text):
+    print("LOG:", text)  # biar keliatan di console juga
+    try:
+        bot.send_message(
+            chat_id=LOGS_GROUP_ID,
+            text=text,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print("LOGS ERROR:", e)
+
 # ================= SETTING ============
 def load_setting():
     if not os.path.exists(SETTING_FILE):

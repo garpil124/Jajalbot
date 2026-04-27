@@ -2261,8 +2261,8 @@ def restore_cmd(update, context):
                     if os.path.exists(f):
                         backup.write(f)
 
-                if os.path.exists("database0"):
-                    for root, _, files2 in os.walk("database0"):
+                if os.path.exists("database99"):
+                    for root, _, files2 in os.walk("database99"):
                         for f in files2:
                             backup.write(os.path.join(root, f))
 
@@ -2306,7 +2306,7 @@ def main():
     load_autotag()
 
     # 🔥 DATABASE
-    database6.start_database_system(bot)
+    database99.start_database_system(bot)
 
     dp = updater.dispatcher
 

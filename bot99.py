@@ -2370,8 +2370,10 @@ def restore_cmd(update, context):
     except Exception as e:
         debug_log(e)
         update.message.reply_text(f"❌ restore gagal: {e}")
+.
 
 # ================= MAIN =================
+
 def main():
     global bot
 
@@ -2386,22 +2388,21 @@ def main():
 
     bot = updater.bot
 
-    # 🔥 LOAD DATA
+    # 🔥 LOAD AUTO TAG DATA
     load_autotag()
 
     # 🔥 DATABASE
-    database99.start_database_system(bot)
+    database6.start_database_system(bot)
 
     dp = updater.dispatcher
 
-    # ================= REGISTER MODULE =================
+    # ================= REGISTER FITUR =================
     register_menu(dp)
     register_rekab(dp)
     register_fitur(dp)
     register_absen(dp)
-    register_protect(dp)
 
-    # ================= COMMAND HANDLERS =================
+    # ================= COMMAND =================
     dp.add_handler(CommandHandler("restore", restore_cmd))
     dp.add_handler(CommandHandler("start", start_cmd))
     dp.add_handler(CommandHandler("help", help_owner))
@@ -2417,68 +2418,78 @@ def main():
     dp.add_handler(CommandHandler("addrules", add_rules))
     dp.add_handler(CommandHandler("delrules", del_rules))
     dp.add_handler(CommandHandler("off", off_cmd))
-    dp.add_handler(CommandHandler("on", on_cmd))
     dp.add_handler(CommandHandler("backup", backup_cmd))
     dp.add_handler(CommandHandler("rollback", rollback_last_backup))
+    dp.add_handler(CommandHandler("on", on_cmd))
     dp.add_handler(CommandHandler("bc", bc_cmd))
 
-    # ================= TAG SYSTEM =================
+    dp.add_handler(
+        CallbackQueryHandler(partner_callback, pattern="^(partner_|edit_)")
+    )
+
+    # 🔥 TAGALL (AMAN)
     dp.add_handler(CommandHandler("tagall", tagall_cmd))
     dp.add_handler(CommandHandler("cancel", cancel_cmd))
     dp.add_handler(CommandHandler("addbuttontag", addbuttontag_cmd))
 
-    # ================= AUTO TAG =================
+    # 🔥 AUTO TAG
     dp.add_handler(CommandHandler("autotag", autotag_menu))
     dp.add_handler(CommandHandler("clearauto", clearauto))
     dp.add_handler(CommandHandler("onauto", onauto))
     dp.add_handler(CommandHandler("offauto", offauto))
 
     # ================= CALLBACK =================
-    dp.add_handler(CallbackQueryHandler(partner_callback, pattern="^(partner_|edit_)"))
     dp.add_handler(CallbackQueryHandler(handle_durasi, pattern="^dur_"))
     dp.add_handler(CallbackQueryHandler(pilih_jam, pattern="^setjam_"))
     dp.add_handler(CallbackQueryHandler(pilih_durasi, pattern="^autodur_"))
     dp.add_handler(CallbackQueryHandler(button_handler))
 
-    # ================= MESSAGE HANDLERS =================
+    # ================= MESSAGE HANDLER =================
+    # 🔥 EDIT PRIORITAS
     dp.add_handler(
         MessageHandler(Filters.text & ~Filters.command, handle_edit),
         group=0
     )
 
+    # 🔥 PRIVATE
     dp.add_handler(
         MessageHandler(
-            Filters.text & Filters.chat_type.private & ~Filters.command,
+            Filters.text & Filters.private & ~Filters.command,
             handle_private
         ),
         group=1
     )
 
+    # 🔥 PROTECT (PALING AKHIR, BIAR GA GANGGU)
+    register_protect(dp)   # <<<<<< INI KUNCINYA
+
     # ================= TELETHON =================
-    try:
-        client.start()
-        print("✅ Telethon nyala")
-    except Exception as e:
-        print("❌ Telethon error:", e)
+    client.start()
+    print("✅ Telethon nyala")
 
     # ================= WORKER =================
-    threading.Thread(target=tagall_worker, daemon=True).start()
+    worker_thread = threading.Thread(target=tagall_worker, daemon=True)
+    worker_thread.start()
     print("🔥 WORKER STARTED")
 
-    threading.Thread(
+    # ================= AUTO TAG WORKER =================
+    auto_thread = threading.Thread(
         target=auto_tag_worker,
         args=(updater.bot,),
         daemon=True
-    ).start()
+    )
+    auto_thread.start()
     print("⏰ AUTO TAG WORKER STARTED")
 
-    threading.Thread(target=reset_limit_daily, daemon=True).start()
+    # ================= AUTO RESET =================
+    reset_thread = threading.Thread(target=reset_limit_daily, daemon=True)
+    reset_thread.start()
 
-    # ================= START BOT =================
+    # ================= START =================
     updater.start_polling(
         poll_interval=2.3,
         timeout=20,
-        drop_pending_updates=True
+        clean=True
     )
 
     print("🚀 BOT RUNNING...")

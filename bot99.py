@@ -2411,3 +2411,17 @@ def main():
 
     print("🚀 BOT RUNNING...")
     updater.idle()
+
+# ================= RUN =================
+if __name__ == "__main__":
+    try:
+        # 🔥 Telethon buat tagall
+        threading.Thread(target=run_telethon, daemon=True).start()
+
+        # 🔥 Bot utama (token)
+        main()
+
+    except Exception as e:
+        print("❌ ERROR:", e)
+        import traceback
+        traceback.print_exc()

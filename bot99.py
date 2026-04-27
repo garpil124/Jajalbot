@@ -2302,20 +2302,22 @@ def main():
 
     bot = updater.bot
 
-    # 🔥 LOAD AUTO TAG DATA
+    # 🔥 LOAD DATA
     load_autotag()
 
     # 🔥 DATABASE
-    database99.start_database_system(bot)
+    database6.start_database_system(bot)
 
     dp = updater.dispatcher
 
-    register_font(dp)
-    register_absen(dp)
-    register_jobdast(dp)
-    register_fitur(dp)
+    # ================= REGISTER MODULE =================
     register_menu(dp)
-    # ================= COMMAND =================
+    register_rekab(dp)
+    register_fitur(dp)
+    register_absen(dp)
+    register_protect(dp)   # 🔥 FIX: protect dipanggil duluan (wajib)
+
+    # ================= COMMAND HANDLERS =================
     dp.add_handler(CommandHandler("restore", restore_cmd))
     dp.add_handler(CommandHandler("start", start_cmd))
     dp.add_handler(CommandHandler("help", help_owner))
@@ -2332,36 +2334,51 @@ def main():
     dp.add_handler(CommandHandler("delrules", del_rules))
     dp.add_handler(CommandHandler("off", off_cmd))
     dp.add_handler(CommandHandler("on", on_cmd))
-    dp.add_handler(CommandHandler("bc", bc_cmd))
     dp.add_handler(CommandHandler("backup", backup_cmd))
     dp.add_handler(CommandHandler("rollback", rollback_last_backup))
-    # 🔥 TAGALL (MANUAL)
+    dp.add_handler(CommandHandler("bc", bc_cmd))
+
+    # 🔥 ANTISPAM CONTROL COMMANDS (INI WAJIB ADA)
+    dp.add_handler(CommandHandler("antibc", cmd_antibc))
+    dp.add_handler(CommandHandler("antispam", cmd_antispam))
+
+    # ================= TAG SYSTEM =================
     dp.add_handler(CommandHandler("tagall", tagall_cmd))
-    dp.add_handler(CommandHandler("cancel", cancel_cmd)) 
+    dp.add_handler(CommandHandler("cancel", cancel_cmd))
     dp.add_handler(CommandHandler("addbuttontag", addbuttontag_cmd))
 
-    # 🔥 AUTO TAG (PRIVATE ONLY)
+    # ================= AUTO TAG =================
     dp.add_handler(CommandHandler("autotag", autotag_menu))
     dp.add_handler(CommandHandler("clearauto", clearauto))
     dp.add_handler(CommandHandler("onauto", onauto))
     dp.add_handler(CommandHandler("offauto", offauto))
-    # ================= CALLBACK =================
-    # 🔥 MANUAL TAG (WAJIB PALING ATAS)
-    dp.add_handler(CallbackQueryHandler(handle_durasi, pattern="^dur_"))
 
-    # 🔥 AUTO TAG (WAJIB DI ATAS button_handler)
+    # ================= CALLBACK =================
+    dp.add_handler(CallbackQueryHandler(partner_callback, pattern="^(partner_|edit_)"))
+
+    dp.add_handler(CallbackQueryHandler(handle_durasi, pattern="^dur_"))
     dp.add_handler(CallbackQueryHandler(pilih_jam, pattern="^setjam_"))
     dp.add_handler(CallbackQueryHandler(pilih_durasi, pattern="^autodur_"))
-
-    # 🔥 tombol lain
     dp.add_handler(CallbackQueryHandler(button_handler))
 
-    # ================= PRIVATE =================
+    # ================= MESSAGE HANDLERS (URUTAN FIXED) =================
+
+    # 🔥 1. PROTECT HARUS PALING ATAS
+    # (sudah di register_protect pakai group -10)
+
+    # 🔥 2. EDIT HANDLER
+    dp.add_handler(
+        MessageHandler(Filters.text & ~Filters.command, handle_edit),
+        group=0
+    )
+
+    # 🔥 3. PRIVATE HANDLER
     dp.add_handler(
         MessageHandler(
-            Filters.text & Filters.private & ~Filters.command,
+            Filters.text & Filters.chat_type.private & ~Filters.command,
             handle_private
-        )
+        ),
+        group=1
     )
 
     # ================= TELETHON =================
@@ -2383,7 +2400,7 @@ def main():
     auto_thread.start()
     print("⏰ AUTO TAG WORKER STARTED")
 
-    # ================= AUTO RESET LIMIT =================
+    # ================= RESET LIMIT =================
     reset_thread = threading.Thread(target=reset_limit_daily)
     reset_thread.daemon = True
     reset_thread.start()
@@ -2392,13 +2409,8 @@ def main():
     updater.start_polling(
         poll_interval=2.3,
         timeout=20,
-        clean=True
+        drop_pending_updates=True   # 🔥 FIX DEPRECATION + lebih stabil
     )
 
     print("🚀 BOT RUNNING...")
     updater.idle()
-
-
-# ================= RUN =================
-if __name__ == "__main__":
-    main()

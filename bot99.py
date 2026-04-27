@@ -22,6 +22,7 @@ from absen import register_absen
 from jobdast import register_jobdast
 from fitur import register_fitur
 from user import register_menu
+from rekab import register_rekab
 
 PAGE_SIZE = 10
 
@@ -397,7 +398,6 @@ def cancel_cmd(update, context):
     except:
         pass
         
-
 # ================= LIST COMMAND =================
 def list_partner(update, context):
     print("🔥 list_partner kepanggil")
@@ -406,7 +406,6 @@ def list_partner(update, context):
         return
 
     send_partner_page_message(update, context, 0)
-
 
 # ================= SEND (FROM COMMAND) =================
 def send_partner_page_message(update, context, page):
@@ -422,20 +421,24 @@ def send_partner_page_message(update, context, page):
 
     text = f"📋 LIST PARTNER\nHalaman {page+1}\n\n"
 
+    # ❌ HAPUS buttons_list (biang dobel)
     for i, p in enumerate(data[start:end], start + 1):
         text += f"{i}. {p.get('name','-')}\n{p.get('link','-')}\n\n"
 
-    buttons = build_buttons(page, total)
+    # ✅ CUMA pakai ini
+    keyboard = build_buttons(page, total)
 
-    update.message.reply_text(text, reply_markup=buttons)
-
+    update.message.reply_text(
+        text,
+        reply_markup=keyboard
+    )
 
 # ================= SEND (FROM CALLBACK MENU) =================
 def send_partner_page_callback(query, context, page):
     data = load_partner()
 
     if not data:
-        query.message.reply_text("❌ kosong")
+        query.edit_message_text("❌ kosong")   # ✅
         return
 
     total = len(data)
@@ -449,23 +452,55 @@ def send_partner_page_callback(query, context, page):
 
     buttons = build_buttons(page, total)
 
-    query.message.reply_text(text, reply_markup=buttons)
+    query.edit_message_text(text, reply_markup=buttons)  # ✅
 
 
-# ================= BUILD BUTTON =================
 def build_buttons(page, total):
     buttons = []
 
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
+
+    # ================= EDIT BUTTON (2 KOLOM) =================
+    row = []
+    for i in range(start, min(end, total)):
+        row.append(
+            InlineKeyboardButton(
+                f"✏️ {i+1}",
+                callback_data=f"edit_menu_{i}"
+            )
+        )
+
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    # kalau sisa 1 tombol
+    if row:
+        buttons.append(row)
+
+    # ================= NAVIGATION =================
+    nav = []
+
     if page > 0:
-        buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"partner_{page-1}"))
+        nav.append(
+            InlineKeyboardButton("⬅️ Prev", callback_data=f"partner_{page-1}")
+        )
 
-    if (page + 1) * PAGE_SIZE < total:
-        buttons.append(InlineKeyboardButton("➡️ Next", callback_data=f"partner_{page+1}"))
+    if end < total:
+        nav.append(
+            InlineKeyboardButton("➡️ Next", callback_data=f"partner_{page+1}")
+        )
 
-    buttons.append(InlineKeyboardButton("❌ Close", callback_data="partner_close"))
+    if nav:
+        buttons.append(nav)
 
-    return InlineKeyboardMarkup([buttons])
+    # ================= CLOSE =================
+    buttons.append([
+        InlineKeyboardButton("❌ Close", callback_data="partner_close")
+    ])
 
+    return InlineKeyboardMarkup(buttons)
 
 # ================= CALLBACK PARTNER =================
 def partner_callback(update, context):
@@ -477,18 +512,33 @@ def partner_callback(update, context):
     data = query.data
     print("DATA:", data)
 
+    data_list = load_partner()
+
+    # ================= CLOSE =================
     if data == "partner_close":
         query.message.delete()
         return
 
+    # ================= OPEN EDIT MENU =================
+    if data.startswith("edit_menu_"):
+        idx = int(data.split("_")[2])
+
+        context.user_data["edit"] = {
+            "idx": idx,
+            "field": "name"
+        }
+
+        # 🔥 FIX DI SINI
+        query.edit_message_text("✏️ kirim format: NAMA LINK")
+        return
+
+    # ================= PAGINATION =================
     try:
         page = int(data.split("_")[1])
     except:
         return
 
-    data_list = load_partner()
     total = len(data_list)
-
     start = page * PAGE_SIZE
     end = start + PAGE_SIZE
 
@@ -500,7 +550,41 @@ def partner_callback(update, context):
     buttons = build_buttons(page, total)
 
     query.edit_message_text(text, reply_markup=buttons)
+
+
+def handle_edit(update, context):
+    print("🔥 HANDLE EDIT KE TRIGGER")
+
+    if "edit" not in context.user_data:
+        print("❌ bukan mode edit")
+        return
+
+    print("✅ MODE EDIT AKTIF")
+
+    text = update.message.text.strip()
+    print("INPUT:", text)
+
+    try:
+        name, link = text.rsplit(" ", 1)
+
+        idx = context.user_data["edit"]["idx"]
+        data = load_partner()
+
+        data[idx] = {
+            "name": name,
+            "link": link,
+            "username": normalize_link(link)
+        }
+
+        save_partner(data)
+
+        update.message.reply_text("✅ updated")
+        del context.user_data["edit"]
+
+    except Exception as e:
+        update.message.reply_text(f"❌ error\n{e}")
     
+
 
 def addbuttontag_cmd(update, context):
     print("🔥 addbuttontag kepanggil")

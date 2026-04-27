@@ -2288,7 +2288,6 @@ def restore_cmd(update, context):
         update.message.reply_text(f"❌ restore gagal: {e}")
 
 # ================= MAIN =================
-
 def main():
     global bot
 
@@ -2316,7 +2315,7 @@ def main():
     register_rekab(dp)
     register_fitur(dp)
     register_absen(dp)
-    register_protect(dp)   # 🔥 FIX: protect dipanggil duluan (wajib)
+    register_protect(dp)
 
     # ================= COMMAND HANDLERS =================
     dp.add_handler(CommandHandler("restore", restore_cmd))
@@ -2352,24 +2351,17 @@ def main():
 
     # ================= CALLBACK =================
     dp.add_handler(CallbackQueryHandler(partner_callback, pattern="^(partner_|edit_)"))
-
     dp.add_handler(CallbackQueryHandler(handle_durasi, pattern="^dur_"))
     dp.add_handler(CallbackQueryHandler(pilih_jam, pattern="^setjam_"))
     dp.add_handler(CallbackQueryHandler(pilih_durasi, pattern="^autodur_"))
     dp.add_handler(CallbackQueryHandler(button_handler))
 
-    # ================= MESSAGE HANDLERS (URUTAN FIXED) =================
-
-    # 🔥 1. PROTECT HARUS PALING ATAS
-    # (sudah di register_protect pakai group -10)
-
-    # 🔥 2. EDIT HANDLER
+    # ================= MESSAGE HANDLERS =================
     dp.add_handler(
         MessageHandler(Filters.text & ~Filters.command, handle_edit),
         group=0
     )
 
-    # 🔥 3. PRIVATE HANDLER
     dp.add_handler(
         MessageHandler(
             Filters.text & Filters.chat_type.private & ~Filters.command,
@@ -2379,49 +2371,36 @@ def main():
     )
 
     # ================= TELETHON =================
-    client.start()
-    print("✅ Telethon nyala")
+    try:
+        client.start()
+        print("✅ Telethon nyala")
+    except Exception as e:
+        print("❌ Telethon error:", e)
 
     # ================= WORKER =================
-    worker_thread = threading.Thread(target=tagall_worker)
-    worker_thread.daemon = True
-    worker_thread.start()
+    threading.Thread(target=tagall_worker, daemon=True).start()
     print("🔥 WORKER STARTED")
 
-    # ================= AUTO TAG WORKER =================
-    auto_thread = threading.Thread(
+    threading.Thread(
         target=auto_tag_worker,
         args=(updater.bot,),
         daemon=True
-    )
-    auto_thread.start()
+    ).start()
     print("⏰ AUTO TAG WORKER STARTED")
 
-    # ================= RESET LIMIT =================
-    reset_thread = threading.Thread(target=reset_limit_daily)
-    reset_thread.daemon = True
-    reset_thread.start()
+    threading.Thread(target=reset_limit_daily, daemon=True).start()
 
     # ================= START BOT =================
     updater.start_polling(
         poll_interval=2.3,
         timeout=20,
-        drop_pending_updates=True   # 🔥 FIX DEPRECATION + lebih stabil
+        drop_pending_updates=True
     )
 
     print("🚀 BOT RUNNING...")
     updater.idle()
 
+
 # ================= RUN =================
 if __name__ == "__main__":
-    try:
-        # 🔥 Telethon buat tagall
-        threading.Thread(target=run_telethon, daemon=True).start()
-
-        # 🔥 Bot utama (token)
-        main()
-
-    except Exception as e:
-        print("❌ ERROR:", e)
-        import traceback
-        traceback.print_exc()
+    main()

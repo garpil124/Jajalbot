@@ -16,6 +16,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext, CommandHandler, CallbackQueryHandler
 from telethon import TelegramClient
 import database99
+from protect import register_protect
 from font import register_font
 from absen import register_absen
 from jobdast import register_jobdast
@@ -2337,10 +2338,6 @@ def main():
     dp.add_handler(CommandHandler("backup", backup_cmd))
     dp.add_handler(CommandHandler("rollback", rollback_last_backup))
     dp.add_handler(CommandHandler("bc", bc_cmd))
-
-    # 🔥 ANTISPAM CONTROL COMMANDS (INI WAJIB ADA)
-    dp.add_handler(CommandHandler("antibc", cmd_antibc))
-    dp.add_handler(CommandHandler("antispam", cmd_antispam))
 
     # ================= TAG SYSTEM =================
     dp.add_handler(CommandHandler("tagall", tagall_cmd))
